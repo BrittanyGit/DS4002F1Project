@@ -2,6 +2,12 @@
 
 #Load packages
 library(tidyverse)
+library(tidymodels)
+library(modelr)
+library(rpart)
+library(rpart.plot)
+library(tree)
+library(randomForest)
 
 #Read in data sets
 circuits<-read.csv("circuits.csv")
@@ -308,6 +314,121 @@ for (i in 1:nrow(f1_data)){
          f1_data$qual_gap[i]<-f1_data$qual_time[i]-time) 
 }
 
-f1_data2<-f1_data %>% filter(finish_position != "\\N",grid<4)
+#Filter out 4th place and drivers who did not finish
+f1_data2<-f1_data %>% 
+  filter(finish_position != "\\N",grid<4) %>% 
+  filter(qual_gap <= 0) %>% 
+  mutate(race_21=0)
 
-write.csv(f1_data2,"f1_data.csv",row.names=FALSE)
+#Create a vector with all of the 2021 circuits
+circuits_2021<-c("Bahrain International Circuit","Autodromo Enzo e Dino Ferrari",
+                 "Autódromo Internacional do Algarve","Circuit de Barcelona-Catalunya",
+                 "Circuit de Monaco","Baku City Circuit",
+                 "Circuit Paul Ricard","Hungaroring","Silverstone Circuit",
+                 "Red Bull Ring","Circuit de Spa-Francorchamps",
+                 "Circuit Park Zandvoort","Autodromo Nazionale di Monza",
+                 "Sochi Autodrom","Istanbul Park","Circuit of the Americas",
+                 "Autódromo Hermanos Rodríguez","Autódromo José Carlos Pace",
+                 "Losail International Circuit","Jeddah Street Circuit",
+                 "Yas Marina Circuit")
+
+#Filter to all the 2021 circuits
+all_years_2021_circuits<-f1_data2 %>% 
+  filter(circuit %in% circuits_2021) 
+
+#True/False if circuit was in 2021
+f1_data2$race_21 <- f1_data2$circuit %in% circuits_2021
+
+#Change to be 1s and 0s
+f1_data2$race_21<-ifelse(f1_data2$race_21==TRUE,1,0)
+
+#Make circuit id a 0 if not raced in 2021
+for(i in 1:nrow(f1_data2)){
+  if(f1_data2$race_21[i]==0){
+    f1_data2$circuitId[i]<-0
+  }
+}
+
+#Make races from 2021 that were new 0s
+for(i in 1:nrow(f1_data2)){
+  if(f1_data2$circuitId[i]==39 | 
+     f1_data2$circuitId[i]==77 |
+     f1_data2$circuitId[i]==78){
+    f1_data2$circuitId[i]<-0
+  }
+}
+
+
+table(f1_data2$circuitId)
+
+#Change nationality to be a factor
+f1_data2<-f1_data2 %>% mutate(nationality=as.factor(nationality))
+
+#Create test and training data
+test_2021<-f1_data2 %>% filter(YEAR == 2021) %>% mutate(won_race=as.factor(won_race))
+train_f1<-f1_data2 %>% filter(YEAR != 2021) %>% mutate(won_race=as.factor(won_race))
+
+#Create a logistic regression model
+LogReg.mod1 <- glm(won_race ~ qual_gap + grid + WEATHER_WET +
+                     circuitId + lat + lng + nationality, 
+                   data = train_f1, family = "binomial")
+summary(LogReg.mod1)
+
+#Run predictions for log reg model
+test_2021$predict<-round(predict(LogReg.mod1,newdata = test_2021,type = "response"),digits = 5)
+
+#Creating the metrics to test the accuracy of our model
+rates<-ROCR::prediction(test_2021$predict,test_2021$won_race)
+roc_result<-ROCR::performance(rates,measure = "tpr",x.measure = "fpr")
+plot(roc_result,main="ROC Curve")
+lines(x=c(0,1),y=c(0,1),col="red")
+
+#Auc
+auc<-ROCR::performance(rates,measure = "auc")
+auc@y.values
+
+#Confusion matrix
+confusion.mat<-table(test_2021$won_race,test_2021$predict>0.5)
+confusion.mat
+
+#Recursive Binary Splitting 
+DT.mod1<-rpart(won_race ~ qual_gap + grid + WEATHER_WET +
+                               circuitId + lat + lng + nationality, 
+                             data = train_f1)
+
+#Plot of DT 1
+DT.mod1 %>%
+  rpart.plot(type = 4, nn = TRUE)
+
+summary(DT.mod1)
+
+DT.add <- test_2021 %>%
+  gather_predictions(DT.mod1, type = "class") %>%
+  rename(pred_won_race = pred) %>%
+  mutate(pred_won_race= as.factor( pred_won_race ),
+         won_race = as.factor( won_race ))
+
+all_metrics <- metric_set(accuracy, precision, recall)
+
+#Look at metrics for DT
+DT.add %>%
+  all_metrics(truth = won_race, estimate = pred_won_race)
+
+# Random Forest
+RF.mod1 <- randomForest(won_race ~ qual_gap + grid + WEATHER_WET +
+                          circuitId + lat + lng + nationality, 
+                        data = train_f1,
+                        mtry = 2, importance = TRUE)
+
+RF.mod1
+
+importance(RF.mod1)
+varImpPlot(RF.mod1)
+
+RF.add <- test_2021 %>%
+  gather_predictions(RF.mod1, type = "class") %>%
+  rename(pred_won_race = pred)  %>%
+  mutate(pred_won_race = as.factor( pred_won_race))
+
+RF.add %>%
+  all_metrics(truth = won_race, estimate = pred_won_race)
