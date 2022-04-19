@@ -1,0 +1,43 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+read.csv("f1_data2.csv")
+
+
+#gaptime
+
+library(gganimate)
+
+library(glue)
+
+dat <- subset(f1_data2, CIRCUITREF == "monaco")
+
+
+head(dat)
+
+fig_f1 <- ggplot(data = f1_data2, aes(x = country, y = qual_time, frame = YEAR)) +
+  geom_point(aes(color = finish_position)) +
+  geom_smooth() + 
+  transition_time(YEAR) +
+  labs(title = "Year: {frame_time}",
+       x = "Qualifying Posiion",
+       y = "Qualifying Time")
+
+anim <- animate(fig_f1, fps = 8)
+anim
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+

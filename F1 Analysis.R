@@ -12,11 +12,11 @@ drivers<-read.csv("drivers.csv")
 lap_times<-read.csv("lap_times.csv")
 pit_stops<-read.csv("PIT_STOPS.csv")
 qualifying<-read.csv("qualifying.csv")
-races<-read.csv("RACES.csv")
+races<-read.csv("Oracle data/RACES.csv")
 results<-read.csv("results.csv")
 seasons<-read.csv("seasons.csv")
 status<-read.csv("status.csv")
-safety_cars<-read.csv("SAFETY_CAR.csv")
+safety_cars<-read.csv("Oracle data/SAFETY_CAR.csv")
 
 #Remove columns from certain sets
 circuits2<-circuits %>% select(-c(location,url))
@@ -200,11 +200,11 @@ drivers<-read.csv("drivers.csv")
 lap_times<-read.csv("lap_times.csv")
 pit_stops<-read.csv("PIT_STOPS.csv")
 qualifying<-read.csv("qualifying.csv")
-races<-read.csv("RACES.csv")
+races<-read.csv("Oracle Data/RACES.csv")
 results<-read.csv("results.csv")
 seasons<-read.csv("seasons.csv")
 status<-read.csv("status.csv")
-safety_cars<-read.csv("SAFETY_CAR.csv")
+safety_cars<-read.csv("Oracle Data/SAFETY_CAR.csv")
 
 #Remove columns from certain sets
 circuits2<-circuits %>% select(-c(location,url))
@@ -311,3 +311,4 @@ for (i in 1:nrow(f1_data)){
 f1_data2<-f1_data %>% filter(finish_position != "\\N",grid<4)
 
 write.csv(f1_data2,"f1_data.csv",row.names=FALSE)
+
