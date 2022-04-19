@@ -8,6 +8,7 @@ library(rpart)
 library(rpart.plot)
 library(tree)
 library(randomForest)
+library(gbm)
 
 #Read in data sets
 circuits<-read.csv("circuits.csv")
@@ -18,11 +19,11 @@ drivers<-read.csv("drivers.csv")
 lap_times<-read.csv("lap_times.csv")
 pit_stops<-read.csv("PIT_STOPS.csv")
 qualifying<-read.csv("qualifying.csv")
-races<-read.csv("Oracle data/RACES.csv")
+races<-read.csv("RACES.csv")
 results<-read.csv("results.csv")
 seasons<-read.csv("seasons.csv")
 status<-read.csv("status.csv")
-safety_cars<-read.csv("Oracle data/SAFETY_CAR.csv")
+safety_cars<-read.csv("SAFETY_CAR.csv")
 
 #Remove columns from certain sets
 circuits2<-circuits %>% select(-c(location,url))
@@ -206,11 +207,11 @@ drivers<-read.csv("drivers.csv")
 lap_times<-read.csv("lap_times.csv")
 pit_stops<-read.csv("PIT_STOPS.csv")
 qualifying<-read.csv("qualifying.csv")
-races<-read.csv("Oracle Data/RACES.csv")
+races<-read.csv("RACES.csv")
 results<-read.csv("results.csv")
 seasons<-read.csv("seasons.csv")
 status<-read.csv("status.csv")
-safety_cars<-read.csv("Oracle Data/SAFETY_CAR.csv")
+safety_cars<-read.csv("SAFETY_CAR.csv")
 
 #Remove columns from certain sets
 circuits2<-circuits %>% select(-c(location,url))
@@ -364,76 +365,403 @@ table(f1_data2$circuitId)
 #Change nationality to be a factor
 f1_data2<-f1_data2 %>% mutate(nationality=as.factor(nationality))
 
-#Create test and training data
-test_2021<-f1_data2 %>% filter(YEAR == 2021) %>% mutate(won_race=as.factor(won_race))
-train_f1<-f1_data2 %>% filter(YEAR != 2021) %>% mutate(won_race=as.factor(won_race))
+write.csv(f1_data2,"f1_model_data.csv",row.names = FALSE)
 
-#Create a logistic regression model
+# #Create test and training data
+# test_2021<-f1_data2 %>% filter(YEAR == 2021) %>% mutate(won_race=as.factor(won_race))
+# train_f1<-f1_data2 %>% filter(YEAR != 2021) %>% mutate(won_race=as.factor(won_race))
+# 
+# #Create a logistic regression model
+# LogReg.mod1 <- glm(won_race ~ qual_gap + grid + WEATHER_WET +
+#                      circuitId + lat + lng + nationality, 
+#                    data = train_f1, family = "binomial")
+# summary(LogReg.mod1)
+# 
+# #Run predictions for log reg model
+# test_2021$predict<-round(predict(LogReg.mod1,newdata = test_2021,type = "response"),digits = 5)
+# 
+# #Creating the metrics to test the accuracy of our model
+# rates<-ROCR::prediction(test_2021$predict,test_2021$won_race)
+# roc_result<-ROCR::performance(rates,measure = "tpr",x.measure = "fpr")
+# plot(roc_result,main="ROC Curve")
+# lines(x=c(0,1),y=c(0,1),col="red")
+# 
+# #Auc
+# auc<-ROCR::performance(rates,measure = "auc")
+# auc@y.values
+# 
+# #Confusion matrix
+# confusion.mat<-table(test_2021$won_race,test_2021$predict>0.5)
+# confusion.mat
+# 
+# #Recursive Binary Splitting 
+# DT.mod1<-rpart(won_race ~ qual_gap + grid + WEATHER_WET +
+#                                circuitId + lat + lng + nationality, 
+#                              data = train_f1)
+# 
+# #Plot of DT 1
+# DT.mod1 %>%
+#   rpart.plot(type = 4, nn = TRUE)
+# 
+# summary(DT.mod1)
+# 
+# DT.add <- test_2021 %>%
+#   gather_predictions(DT.mod1, type = "class") %>%
+#   rename(pred_won_race = pred) %>%
+#   mutate(pred_won_race= as.factor( pred_won_race ),
+#          won_race = as.factor( won_race ))
+# 
+# all_metrics <- metric_set(accuracy, precision, recall)
+# 
+# #Look at metrics for DT
+# DT.add %>%
+#   all_metrics(truth = won_race, estimate = pred_won_race)
+# 
+# # Random Forest
+# RF.mod1 <- randomForest(won_race ~ qual_gap + grid + WEATHER_WET +
+#                           circuitId + lat + lng + nationality, 
+#                         data = train_f1,
+#                         mtry = 3, importance = TRUE)
+# 
+# RF.mod1
+# 
+# importance(RF.mod1)
+# varImpPlot(RF.mod1)
+# 
+# # RF.add <- test_2021 %>%
+# #   gather_predictions(RF.mod1, type = "prob") %>%
+# #   rename(pred_won_race = pred)  %>%
+# #   mutate(pred_won_race = as.factor( pred_won_race))
+# 
+# test_2021$predict<-predict(RF.mod1,new_data=test_2021)
+# 
+# RF.add %>%
+#   all_metrics(truth = won_race, estimate = pred_won_race)
+
+model_f1_data<-read.csv("f1_model_data.csv")
+
+model_f1_data<-model_f1_data %>% mutate(won_race=as.factor(won_race),
+                                        WEATHER_WET=as.factor(WEATHER_WET),
+                                        nationality=as.factor(nationality))
+
+train<-model_f1_data %>% filter(YEAR!=2021)
+test<-model_f1_data %>% filter(YEAR==2021)
+
+pred.test<-test[,"won_race"]
+
+##Random Forest
+set.seed(2222)
+rf.class<-randomForest::randomForest(won_race ~ qual_gap + grid + WEATHER_WET +
+                                       circuitId + lat + lng + nationality, 
+                                     data=train, mtry=3,importance=TRUE)
+rf.class
+
+importance(rf.class)
+varImpPlot(rf.class)
+
+##test accuracy with Random Forest
+pred.rf<-predict(rf.class, newdata=test)
+mean(pred.rf==pred.test) ## 67%
+
+table(pred.test,pred.rf)
+
+# Bagging
+set.seed(222)
+##bagging is special case of random forest when mtry = number of predictors
+bag.class<-randomForest::randomForest(won_race ~ qual_gap + grid + WEATHER_WET +
+                                        circuitId + lat + lng + nationality, 
+                                      data=train, mtry=7, importance=TRUE)
+bag.class ##note with classification tree OOB estimates are provided
+
+##importance measures of predictors
+randomForest::importance(bag.class)
+##graphical version
+randomForest::varImpPlot(bag.class)
+
+##test accuracy with bagging
+pred.bag<-predict(bag.class, newdata=test)
+##confusion matrix for test data
+table(pred.test, pred.bag)
+mean(pred.bag==pred.test) ## 72%
+
+# ## Boosting
+# set.seed(22222)
+# boost.class<-gbm::gbm(won_race ~ qual_gap + grid + WEATHER_WET +
+#                         circuitId + lat + lng + nationality, 
+#                       data=train, distribution="bernoulli", n.trees=500)
+# summary(boost.class)
+# 
+# plot(boost.class,i="rm")
+# plot(boost.class,i="lstat")
+# 
+# ##this gives predicted probabilities, not predicted class. This is because the response is using 0/1 dummy codes with gbm()
+# pred.boost<-predict(boost.class, newdata=test, n.trees=500, type = "response")
+# 
+# ##confusion matrix
+# boost.tab<-table(pred.test, pred.boost>0.5)
+# boost.tab
+# ##test accuracy with boosting
+# (boost.tab[1,1]+boost.tab[2,2])/sum(boost.tab) ##0.905. 
+
+## Recursive Binary Splitting
+
+##Use recursive binary splitting on training data
+tree.class.train<-tree::tree(won_race ~ qual_gap + grid + WEATHER_WET +
+                               circuitId + lat + lng + nationality, data=train)
+summary(tree.class.train) ##16 terminal nodes! difficult to interpret
+
+##plot tree
+plot(tree.class.train)
+text(tree.class.train, cex=0.6, pretty=0) ##Note: If there are categorical predictors, should have an additional argument: pretty=0 so R will use the category names in the tree
+
+##find predicted classes for test data
+tree.pred.test<-predict(tree.class.train, newdata=test, type="class") ##type="class" to get predicted class based on threshold of 0.5
+head(tree.pred.test)
+
+##find predicted probabilities for test data
+pred.probs<-predict(tree.class.train, newdata=test)
+head(pred.probs)
+
+##confusion matrix for test data
+table(pred.test, tree.pred.test) ##actual classes in rows, predicted classes in columns
+
+##overall accuracy
+mean(tree.pred.test==pred.test) ## 75%
+
+##Prune tree##
+
+##use CV
+set.seed(2)
+cv.class<-tree::cv.tree(tree.class.train, K=10, FUN=prune.misclass) ##FUN=prune.misclass so error rate is used to guide CV and pruning, rather than the deviance which is the default (and should not be used in classification).
+cv.class
+
+##plot of dev against size
+plot(cv.class$size, cv.class$dev,type='b')
+
+##size of tree chosen by pruning
+trees.num.class<-cv.class$size[which.min(cv.class$dev)]
+trees.num.class ##4 terminal nodes. A lot smaller than recursive binary splitting
+
+##fit tree with size chosen by pruning
+prune.class<-tree::prune.misclass(tree.class.train, best=trees.num.class)
+prune.class
+
+##plot pruned tree
+plot(prune.class)
+text(prune.class, cex=0.75, pretty=0)
+
+##prediction based on pruned tree for test data
+tree.pred.prune<-predict(prune.class, newdata=test, type="class")
+##confusion matrix for test data
+table(pred.test, tree.pred.prune)
+
+##overall accuracy
+mean(tree.pred.prune==pred.test) #75%
+
+#Logistic Regression
 LogReg.mod1 <- glm(won_race ~ qual_gap + grid + WEATHER_WET +
-                     circuitId + lat + lng + nationality, 
-                   data = train_f1, family = "binomial")
+                     circuitId + lat + lng + nationality,
+                   data = train, family = "binomial")
 summary(LogReg.mod1)
 
-#Run predictions for log reg model
-test_2021$predict<-round(predict(LogReg.mod1,newdata = test_2021,type = "response"),digits = 5)
+##predicted survival rate for test data based on training data
+preds<-predict(LogReg.mod1,newdata=test, type="response")
 
-#Creating the metrics to test the accuracy of our model
-rates<-ROCR::prediction(test_2021$predict,test_2021$won_race)
-roc_result<-ROCR::performance(rates,measure = "tpr",x.measure = "fpr")
-plot(roc_result,main="ROC Curve")
-lines(x=c(0,1),y=c(0,1),col="red")
+##produce the numbers associated with classification table
+rates<-ROCR::prediction(preds, test$won_race)
+rates
 
-#Auc
-auc<-ROCR::performance(rates,measure = "auc")
+##store the true positive and false postive rates
+roc_result<-ROCR::performance(rates,measure="tpr", x.measure="fpr")
+
+##plot ROC curve and overlay the diagonal line for random guessing
+plot(roc_result, main="ROC Curve")
+lines(x = c(0,1), y = c(0,1), col="red")
+
+##compute the AUC
+auc<-ROCR::performance(rates, measure = "auc")
 auc@y.values
 
-#Confusion matrix
-confusion.mat<-table(test_2021$won_race,test_2021$predict>0.5)
+##confusion matrix when threshold is 0.5
+confusion.mat<-table(test$won_race,preds > 0.5)
 confusion.mat
 
-#Recursive Binary Splitting 
-DT.mod1<-rpart(won_race ~ qual_gap + grid + WEATHER_WET +
-                               circuitId + lat + lng + nationality, 
-                             data = train_f1)
+acc<-46/57
+acc
 
-#Plot of DT 1
-DT.mod1 %>%
-  rpart.plot(type = 4, nn = TRUE)
+# Accuracy of 81%
 
-summary(DT.mod1)
+## Looking at the top 5 most raced at tracks 
+top_5<-c("silverstone","hungaroring","monza","spa","monaco")
 
-DT.add <- test_2021 %>%
-  gather_predictions(DT.mod1, type = "class") %>%
-  rename(pred_won_race = pred) %>%
-  mutate(pred_won_race= as.factor( pred_won_race ),
-         won_race = as.factor( won_race ))
+top_tracks<-model_f1_data %>% filter(CIRCUITREF %in% top_5)
 
-all_metrics <- metric_set(accuracy, precision, recall)
+top_tracks<-top_tracks %>% select(won_race,qual_gap,grid,
+                                  WEATHER_WET,circuitId,
+                                  lat,lng,YEAR)
 
-#Look at metrics for DT
-DT.add %>%
-  all_metrics(truth = won_race, estimate = pred_won_race)
+top_tracks<-top_tracks %>% mutate(grid=as.factor(grid),
+                                  circuitId=as.factor(circuitId))
 
-# Random Forest
-RF.mod1 <- randomForest(won_race ~ qual_gap + grid + WEATHER_WET +
-                          circuitId + lat + lng + nationality, 
-                        data = train_f1,
-                        mtry = 2, importance = TRUE)
+train<-top_tracks %>% filter(YEAR<=2014) %>% select(-YEAR)
+test<-top_tracks %>% filter(YEAR > 2014) %>% select(-YEAR)
 
-RF.mod1
+#Logistic Regression
+LogReg.mod2 <- glm(won_race ~.,
+                   data = train, family = "binomial")
+summary(LogReg.mod1)
 
-importance(RF.mod1)
-varImpPlot(RF.mod1)
+##predicted survival rate for test data based on training data
+preds<-predict(LogReg.mod2,newdata=test, type="response")
 
-RF.add <- test_2021 %>%
-  gather_predictions(RF.mod1, type = "class") %>%
-  rename(pred_won_race = pred)  %>%
-  mutate(pred_won_race = as.factor( pred_won_race))
+test$predict<-preds
 
-<<<<<<< HEAD
-write.csv(f1_data2,"f1_data.csv",row.names=FALSE)
+##produce the numbers associated with classification table
+rates<-ROCR::prediction(preds, test$won_race)
+rates
 
-=======
-RF.add %>%
-  all_metrics(truth = won_race, estimate = pred_won_race)
->>>>>>> 04999a0302fec48029d77149c8a0950d45a663de
+##store the true positive and false postive rates
+roc_result<-ROCR::performance(rates,measure="tpr", x.measure="fpr")
+
+##plot ROC curve and overlay the diagonal line for random guessing
+plot(roc_result, main="ROC Curve")
+lines(x = c(0,1), y = c(0,1), col="red")
+
+##compute the AUC
+auc<-ROCR::performance(rates, measure = "auc")
+auc@y.values
+
+##confusion matrix when threshold is 0.5
+confusion.mat<-table(test$won_race,preds > 0.5)
+confusion.mat
+
+acc<-67/86
+acc
+
+circuit<-circuits %>% mutate(circuitId=as.factor(circuitId)) %>% 
+  select(circuitId,name,country,location)
+
+prob_summary<-test %>% filter(grid==1) %>% 
+  group_by(circuitId) %>% summarise(avg_prob=sum(predict)/n()) %>% 
+  left_join(circuit)
+
+##MODEL 3
+
+#Get number of pit stops for each driver each race
+pit_stops2<-pit_stops %>% group_by(RACEID,DRIVERID) %>%
+  arrange(desc(STOP)) %>% slice(1)
+
+#Rename column
+pit_stops2<-rename(pit_stops2, num_stops=STOP)
+
+#Remove extra columns
+pit_stops2<-pit_stops2 %>% select(-c(LAP,TIME,DURATION,MILLISECONDS))
+
+top_tracks_pit <- model_f1_data %>% 
+  left_join(pit_stops2,by=c("raceId"="RACEID","driverId"="DRIVERID")) %>% na.omit()
+
+safety_cars<-rename(safety_cars, NAME=RACE)
+
+top_tracks_pit_safe<-top_tracks_pit %>% left_join(safety_cars,by=c("YEAR","NAME"))
+
+top_tracks_pit_safe[is.na(top_tracks_pit_safe)]<-0
+
+top_tracks_pit_safe<-top_tracks_pit_safe %>% select(won_race,qual_gap,grid,
+                                  WEATHER_WET,circuitId,
+                                  lat,lng,YEAR,COUNT,num_stops)
+
+top_tracks_pit_safe<-top_tracks_pit_safe %>% mutate(grid=as.factor(grid),
+                                  circuitId=as.factor(circuitId),
+                                  COUNT=as.factor(COUNT),
+                                  num_stops=as.factor(num_stops))
+
+train<-top_tracks_pit_safe %>% filter(YEAR != 2021) %>% select(-YEAR)
+test<-top_tracks_pit_safe %>% filter(YEAR == 2021) %>% select(-YEAR)
+
+#Logistic Regression
+LogReg.mod3 <- glm(won_race ~.,
+                   data = train, family = "binomial")
+summary(LogReg.mod3)
+
+##predicted survival rate for test data based on training data
+preds<-predict(LogReg.mod3,newdata=test, type="response")
+
+test$predict<-preds
+
+##produce the numbers associated with classification table
+rates<-ROCR::prediction(preds, test$won_race)
+rates
+
+##store the true positive and false postive rates
+roc_result<-ROCR::performance(rates,measure="tpr", x.measure="fpr")
+
+##plot ROC curve and overlay the diagonal line for random guessing
+plot(roc_result, main="ROC Curve")
+lines(x = c(0,1), y = c(0,1), col="red")
+
+##compute the AUC
+auc<-ROCR::performance(rates, measure = "auc")
+auc@y.values
+
+##confusion matrix when threshold is 0.5
+confusion.mat<-table(test$won_race,preds > 0.5)
+confusion.mat
+
+acc<-41/54
+acc
+
+##Use recursive binary splitting on training data
+tree.class.train<-tree::tree(won_race ~ ., data=train)
+summary(tree.class.train) ##16 terminal nodes! difficult to interpret
+
+##plot tree
+plot(tree.class.train)
+text(tree.class.train, cex=0.6, pretty=0) ##Note: If there are categorical predictors, should have an additional argument: pretty=0 so R will use the category names in the tree
+
+##find predicted classes for test data
+tree.pred.test<-predict(tree.class.train, newdata=test, type="class") ##type="class" to get predicted class based on threshold of 0.5
+head(tree.pred.test)
+
+##find predicted probabilities for test data
+pred.probs<-predict(tree.class.train, newdata=test)
+test$predict<-pred.probs
+head(pred.probs)
+
+pred.test<-test[,"won_race"]
+
+##confusion matrix for test data
+table(pred.test, tree.pred.test) ##actual classes in rows, predicted classes in columns
+
+##overall accuracy
+mean(tree.pred.test==pred.test) #78%
+
+# Bagging
+set.seed(222)
+##bagging is special case of random forest when mtry = number of predictors
+bag.class<-randomForest::randomForest(won_race ~ ., 
+                                      data=train, mtry=8, importance=TRUE)
+bag.class ##note with classification tree OOB estimates are provided
+
+##importance measures of predictors
+randomForest::importance(bag.class)
+##graphical version
+randomForest::varImpPlot(bag.class)
+
+##test accuracy with bagging
+pred.bag<-predict(bag.class, newdata=test)
+##confusion matrix for test data
+table(pred.test, pred.bag)
+mean(pred.bag==pred.test) #69%
+
+##Random Forest
+set.seed(2222)
+rf.class<-randomForest::randomForest(won_race ~ ., 
+                                     data=train, mtry=3,importance=TRUE)
+rf.class
+
+importance(rf.class)
+varImpPlot(rf.class)
+
+##test accuracy with Random Forest
+pred.rf<-predict(rf.class, newdata=test)
+mean(pred.rf==pred.test) #70%
