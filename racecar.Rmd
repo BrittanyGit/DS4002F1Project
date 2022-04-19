@@ -1,21 +1,37 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 
 
 ```{r}
-f1<-read.csv('f1_data.csv')
-head(f1)
+f1<-read.csv('f1_data2.csv')
 ```
+
+
+
+```{r}
+head(f1) 
+#note: qual_gap column is all (-) values because it is each of the 1,2,3 qualifiers' time minus the fourth place person's qualifying time (because each of the people finished before the fourth place qualifier.)
+```
+
+
+```{r}
+zero<-f1 %>% filter(won_race==0)
+count(zero)/count(f1)
+#the baseline rate is that 66% of the target/response variable column is won_race=0, so basically the target variable is pretty balanced and we didn't have to do pre-balancing before running the ML model.
+
+```
+
 
 ```{r}
 library(ggplot2)
-
 library(dplyr)
 
-formula_1_data<-f1 %>% filter(qual_gap>=0)
+formula_1_data<-f1 #%>% filter(qual_gap>=0)
 
 test<-formula_1_data %>% group_by(CIRCUITREF) %>% 
   summarise(total_races=n()) %>% 
@@ -30,24 +46,37 @@ formula_1_data_filtered<-formula_1_data %>% filter(CIRCUITREF %in% circuits) %>%
 #######
 formula_1_data_filtered$grid<-as.factor(formula_1_data_filtered$grid)
 plot_circuits<-ggplot(formula_1_data_filtered,aes(x=grid,y=won_race, fill=grid)) +
-  geom_bar(stat="identity") + facet_wrap(~CIRCUITREF) + theme_minimal()
+  geom_bar(stat="identity")+ labs(title = "All Time Wins versus Starting Position by Track",
+                                    x="Qualifying Position",y="Number of Wins") +facet_wrap(~CIRCUITREF) + theme_minimal()
 
 plot_circuits
 
 
 
 ######
-plot_wins_position<-ggplot(formula_1_data_filtered,aes(x=grid,y=won_race, fill=grid))+
-  geom_bar(stat = "identity")+ labs(title = "All time wins by starting position",
+weather_rain_filtered<-formula_1_data_filtered %>% filter(WEATHER_WET=='Y')
+plot_wins_position1<-ggplot(weather_rain_filtered,aes(x=grid,y=won_race, fill=grid))+
+  geom_bar(stat = "identity") + labs(title = "All Time Wins by Starting Position (Rainy Weather)",
                                     x="Starting Position",
                                     y="Total Wins") + theme_minimal()
 
-plot_wins_position
+plot_wins_position1
+
+
+weather_dry_filtered<-formula_1_data_filtered %>% filter(WEATHER_WET=='N')
+plot_wins_position2<-ggplot(weather_dry_filtered,aes(x=grid,y=won_race, fill=grid))+
+  geom_bar(stat = "identity") + labs(title = "All Time Wins by Starting Position (Dry Weather)",
+                                    x="Starting Position",
+                                    y="Total Wins") + theme_minimal()
+
+plot_wins_position2
 
 #####
 formula_1_data_filtered$grid<-as.factor(formula_1_data_filtered$grid)
 
-plot_quality2<-ggplot(formula_1_data_filtered, aes(x=qual_gap, y=finish_position, color=grid))+geom_point()+theme_minimal()
+plot_quality2<-ggplot(formula_1_data_filtered, aes(x=qual_gap, y=finish_position, color=grid))+ labs(title = "Qualifying Gap versus Finish Position for All Races",
+                                    x="Qualifying Gap",
+                                    y="Finishing Position")+geom_point()+theme_minimal()
  
 plot_quality2
 
