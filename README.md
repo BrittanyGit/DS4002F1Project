@@ -1,6 +1,6 @@
 # DS4002F1Project
 Joe Barrett, Connor Nickol, Brittany Nguyen
-Using R for machine learning classification: Analyzing whether the first, second, and third place qualifiers will win a specific race given a set of predictors including weather, qualifying gap, and number of safety cars and pit stops
+# Using R for machine learning classification: Analyzing whether the first, second, and third place qualifiers will win a specific race given a set of predictors including weather, qualifying gap, and number of safety cars and pit stops
 
 ## Presentation
 https://myuva-my.sharepoint.com/personal/jsb8vs_virginia_edu/Documents/DS_Capstone_Final_Presentation.pptx?web=1
