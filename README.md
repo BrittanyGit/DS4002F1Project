@@ -4,8 +4,6 @@ Joe Barrett, Connor Nickol, Brittany Nguyen
 ## Presentation
 https://myuva-my.sharepoint.com/personal/jsb8vs_virginia_edu/Documents/DS_Capstone_Final_Presentation.pptx?web=1
 
-## Notes
-https://docs.google.com/document/d/1vWmjw2tiJy-rdInEJMqRyubB238VqnqowKtmT0lpLlA/edit
 
 ## Data
 https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020 
